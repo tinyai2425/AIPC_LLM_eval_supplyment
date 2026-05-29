@@ -1,0 +1,27 @@
+{
+  "model_name": "DeepSeek-R1-Distill-Qwen-7B",
+  "TOKENIZER_CONFIG_PATH": "../Model_file/DeepSeek-R1-Distill-Qwen-7B",
+
+  "TEMPERATURE": 0.6,
+  "TOPP": 0.95,
+  "TOPK": 10,
+  "REPETITIONPENALTY": 1.1,
+
+  "INFER_TYPE": 0,
+  "TOKENIZER_TYPE": 4,
+  "TOKENIZER_PATH": "tokenizer.json",
+  "MODEL_TYPE": 0,
+  "MODEL_PATH": "ds7b.omc",
+  "WEIGHT_DIR": "./",
+  "PREFIX_PROMPT": "",
+  "PMT_CACHE_OP": "",
+  "PFX_INIT_TOKEN_LEN": 6,
+  "LORA_CFG_PATH": "omc.omc.loraconf",
+  "CALLBACK_FREQ": 2,
+  "SAMPLE_FLAG": true,
+  "SEED": 99,
+  "INIT_TOKEN_LEN": 2048,
+  "IS_ASYNC": true,
+  "STOP_SEQ": ["<endofsentence>", "<｜end▁of▁sentence｜>"],
+  "LORA_RANKS": [8, 16, 32, 64]
+}

@@ -1,0 +1,35 @@
+{
+  "model_name": "Qwen25-Coder-7B-Instruct",
+  "TOKENIZER_CONFIG_PATH": "../Model_file/Qwen2.5-Coder-7B-Instruct",
+  "TEMPERATURE": 0.0,
+  "TOPP": 1,
+  "TOPK": 1,
+  "REPETITIONPENALTY": 1.0,
+  "INFER_TYPE": 0,
+  "TOKENIZER_TYPE": 4,
+  "TOKENIZER_PATH": "tokenizer.json",
+  "MODEL_TYPE": 0,
+  "MODEL_PATH": "qwen7b.omc",
+  "WEIGHT_DIR": "./",
+  "PREFIX_PROMPT": "",
+  "PMT_CACHE_OP": "",
+  "PFX_INIT_TOKEN_LEN": 6,
+  "LORA_CFG_PATH": "",
+  "CALLBACK_FREQ": 2,
+  "SAMPLE_FLAG": true,
+  "SEED": 99,
+  "INIT_TOKEN_LEN": 1024,
+  "IS_ASYNC": true,
+  "STOP_SEQ": [
+    "<|im_end|>",
+    "<|endoftext|>",
+    "<|endofmask|>",
+    "</s>",
+    "\nif __name__",
+    "\ndef main(",
+     "\nprint(",
+     "\n#"
+  ],
+  "LORA_RANKS": [8, 16, 32, 64]
+                       
+}

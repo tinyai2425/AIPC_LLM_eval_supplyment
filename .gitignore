@@ -1,0 +1,84 @@
+# =================== Python ===================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 打包 / 构建产物
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+
+# =================== 虚拟环境 ===================
+.venv/
+venv/
+env/
+ENV/
+.python-version
+.conda/
+
+# =================== 工具缓存 ===================
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# =================== Jupyter ===================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# =================== IDE / 编辑器 ===================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.spyderproject
+.spyproject
+*.code-workspace
+
+# =================== OS ===================
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# =================== 日志 ===================
+*.log
+logs/
+
+# =================== BFCL eval 专属 ===================
+# 数据集：BFCL v3 体积较大，按 README 单独下载放置，不进 git
+Data_set/
+
+# 本地 tokenizer / 模型权重：按 README 自行放，不进 git
+#Model_file/
+
+# 评估产物根目录：每次跑 1_Data_gen 都会写入此处
+model-eval-storage/
+
+# 评估生成的目录（GPU-BFCL-YYYYMMDD / OMC-BFCL-... / API-BFCL-...）若直接落在仓库内也忽略
+GPU-BFCL-*/
+OMC-BFCL-*/
+API-BFCL-*/
+
+# 评估端跑出来的原始日志（数据生成时的 OMC/API 推理结果 .txt）
+project-*-BFCL-OMC-*.txt
+project-*-BFCL-API-*.txt
+tool_use_dialog_resume.txt
+
+# 评估生成的二进制 / 报表 / 图（README 不会被误伤）
+*.parquet
+*.xlsx
+*.png
+*.jpg
+*.jpeg
+*_GPU_avg.md
+*_OMC_avg.md
+*_API_avg.md

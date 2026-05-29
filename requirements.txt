@@ -1,0 +1,25 @@
+# Python >= 3.10 实测可跑（开发环境为 3.10.20）
+
+# 本地 tokenizer + chat template 渲染（数据生成阶段用 AutoTokenizer.apply_chat_template
+# 把 system+user 拼成 OMC 用的单串 prompt；评估阶段用 tokenize 算 prompt/response 长度）
+transformers>=4.40.0
+jinja2>=3.1.0            # transformers.apply_chat_template 的模板引擎，软依赖必装
+sentencepiece>=0.1.99    # SentencePiece 系 tokenizer（Llama/Mistral 等）必装；Qwen 用 BPE 可不装但留着无害
+
+# 数据处理 + 落 parquet / Excel
+pandas>=2.0.0
+pyarrow>=12.0.0          # pandas.to_parquet 后端
+openpyxl>=3.1.0          # pandas.ExcelWriter 后端
+
+# 远端 vLLM 调用（OpenAI 兼容接口，stream + include_usage 需要 >=1.30）
+openai>=1.30.0
+
+# 趋势图绘制
+matplotlib>=3.7.0
+numpy>=1.24.0
+
+# 多 version 求均值后导出 markdown 表
+tabulate>=0.9.0
+
+# 自动检测 OMC/API 日志文件编码（chardet）
+chardet>=5.0.0

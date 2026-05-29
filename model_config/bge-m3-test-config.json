@@ -1,0 +1,4 @@
+{
+  "model_name": "bge-m3",
+  "TOKENIZER_CONFIG_PATH": "../Model_file/bge-m3"
+}
