@@ -58,7 +58,21 @@ def _common_top_level():
     }
 
 
-def _common_sentence_params(maxGenTokens):
+def _resolve_stop_seq(extra_stop_seq):
+    """模型默认 stopSeq + 数据集额外追加的截止符。
+    BFCL 不传 extra_stop_seq；HumanEval 之类需要代码续写"刹车"的数据集可以加 `\\nclass `、`\\nif __name__` 等。"""
+    if mp is None:
+        raise ValueError("You must call `set_model_config(mp)` first.")
+    stop_seq = list(mp.STOP_SEQ)
+    if extra_stop_seq:
+        # 保留顺序、去重
+        for s in extra_stop_seq:
+            if s not in stop_seq:
+                stop_seq.append(s)
+    return stop_seq
+
+
+def _common_sentence_params(maxGenTokens, extra_stop_seq=None):
     if mp is None:
         raise ValueError("You must call `set_model_config(mp)` first.")
     return {
@@ -72,15 +86,15 @@ def _common_sentence_params(maxGenTokens):
         "repetitionPenalty": mp.REPETITIONPENALTY,
         "initTokenLen": mp.INIT_TOKEN_LEN,
         "isAsync": mp.IS_ASYNC,
-        "stopSeq": mp.STOP_SEQ,
+        "stopSeq": _resolve_stop_seq(extra_stop_seq),
     }
 
 
-def create_omc_test(testCaseName, prompt, expect="", maxGenTokens=2000):
+def create_omc_test(testCaseName, prompt, expect="", maxGenTokens=2000, extra_stop_seq=None):
     """OMC：严格 Ceval 结构。sentences[0] 只含 prompt/expect + Ceval 既有采样参数。
-    BFCL 的 system prompt 已经在 prompt 里通过 apply_chat_template 渲染好。"""
+    system prompt 已经在 prompt 里通过 apply_chat_template 渲染好。"""
     sentence = {"prompt": prompt, "expect": expect}
-    sentence.update(_common_sentence_params(maxGenTokens))
+    sentence.update(_common_sentence_params(maxGenTokens, extra_stop_seq))
     return {
         "testCaseName": testCaseName,
         **_common_top_level(),
@@ -88,11 +102,11 @@ def create_omc_test(testCaseName, prompt, expect="", maxGenTokens=2000):
     }
 
 
-def create_gpu_test(testCaseName, messages, expect="", maxGenTokens=2000):
+def create_gpu_test(testCaseName, messages, expect="", maxGenTokens=2000, extra_stop_seq=None):
     """GPU：顶层与 OMC 同款；sentence 用 messages 而非 prompt，可以直接送 vLLM
     chat.completions.create。category / eval_type 不进字段，evaluator 从 testCaseName 解析。"""
     sentence = {"messages": messages, "expect": expect}
-    sentence.update(_common_sentence_params(maxGenTokens))
+    sentence.update(_common_sentence_params(maxGenTokens, extra_stop_seq))
     return {
         "testCaseName": testCaseName,
         **_common_top_level(),
@@ -100,7 +114,7 @@ def create_gpu_test(testCaseName, messages, expect="", maxGenTokens=2000):
     }
 
 
-def create_api_test(testCaseName, messages, expect="", maxGenTokens=2000):
+def create_api_test(testCaseName, messages, expect="", maxGenTokens=2000, extra_stop_seq=None):
     """API：OpenAI 风格顶层结构（messages / options 都在最外层）。
     category / eval_type 不进字段，evaluator 从 testCaseName 解析。"""
     if mp is None:
@@ -118,6 +132,6 @@ def create_api_test(testCaseName, messages, expect="", maxGenTokens=2000):
             "top_k": mp.TOPK,
             "top_p": mp.TOPP,
             "repeat_penalty": mp.REPETITIONPENALTY,
-            "stop": mp.STOP_SEQ,
+            "stop": _resolve_stop_seq(extra_stop_seq),
         },
     }

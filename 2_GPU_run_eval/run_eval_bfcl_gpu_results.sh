@@ -4,7 +4,7 @@
 
 TOKENIZER_PATH="../Model_file/Qwen3-4B"
 INPUT_JSON_PATH="../../model-eval-storage/Qwen3-4B/project-1/project-1-BFCL-GPU-100.json"
-VLLM_IP="10.93.64.30"
+VLLM_IP="127.0.0.1"
 VLLM_PORT=8895
 VLLM_MODEL_ID="qwen3_4b"
 VERSION_FLAG=1           # 跑 N 次：会出 GPU-Results-1.parquet ... GPU-Results-N.parquet，并自动求均值 markdown
