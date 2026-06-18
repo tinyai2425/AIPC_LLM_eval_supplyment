@@ -360,7 +360,9 @@ project-N/GPU-HUMANEVAL-20260529/
 
 ## 四'、阶段二：OMC 评估
 
-OMC 工具跑完 `*-BFCL-OMC-{P}.json` 后会落一份 `.txt` 日志（按 `[INFO] ## testCaseName: <name>, start/Done` 分隔每条用例）。`3_OMC_eval` 把日志解析成 DataFrame，跑 BFCL AST 评分，落 parquet + Excel + 趋势图。
+OMC 工具跑完 `*-{BFCL|HUMANEVAL}-OMC-*.json` 后会落一份 `.txt` 日志（按 `[INFO] ## testCaseName: <name>, start/Done` 分隔每条用例）。`3_OMC_eval` 把日志解析成 DataFrame、跑对应数据集的评分，落 parquet + Excel + 趋势图。两个数据集复用同一份 `OMC_collect.py`（日志格式完全一致），只是注入的 `verify_answer` 不同。
+
+### BFCL OMC
 
 ```bash
 cd 3_OMC_eval
@@ -376,29 +378,52 @@ python Eval_BFCL_OMC_results.py \
     --show_detail
 ```
 
-产出在 `{project_base}/OMC-BFCL-<YYYYMMDD>[-N]/` 下（同一项目同日多次跑会自动追加 `-2` / `-3`）：
-```
-project-N/OMC-BFCL-20260529/
-├── OMC-Results.parquet            # 逐条原始结果
-├── OMC_Summary.xlsx               # summary_omc / category_omc / breakdown_omc
-└── analysis.png                   # entropy / repeat 趋势图（show_detail）
+产出在 `{project_base}/OMC-BFCL-<YYYYMMDD>[-N]/`。
+
+### HumanEval OMC
+
+```bash
+cd 3_OMC_eval
+bash run_eval_humaneval_omc_results.sh
 ```
 
-逐条结果字段：与 GPU 端基本同款，外加 OMC 日志自带的原始指标列（`inputTokenCount` / `outputTokenCount` / `decodeTimeMs` / `prefillTimeMs` / `decodeTimeMs per token` 等，便于排查）。时长口径：
+或直接命令行：
+
+```bash
+python Eval_HumanEval_OMC_results.py \
+    ../Model_file/Qwen2.5-Coder-7B-Instruct \
+    ../../model-eval-storage/Qwen2.5-Coder-7B-Instruct/project-1/project-1-HUMANEVAL-OMC-164.txt \
+    --show_detail
+```
+
+产出在 `{project_base}/OMC-HUMANEVAL-<YYYYMMDD>[-N]/`。**注意**：HumanEval 评分会在 evaluator host 上跑模型生成的代码（subprocess + 10s 超时），不是真沙箱——只在可信环境跑。
+
+---
+
+OMC 端逐条结果字段：与 GPU 端基本同款，外加 OMC 日志自带的原始指标列（`inputTokenCount` / `outputTokenCount` / `decodeTimeMs` / `prefillTimeMs` / `decodeTimeMs per token` 等，便于排查）。时长口径：
 - `first_token_time` = `prefillTimeMs / 1000`
 - `decode_time` = `decodeTimeMs / 1000`
 - `total_time` = `first_token_time + decode_time`
 
 ## 四''、阶段二：API 评估
 
-API 客户端跑完 `*-BFCL-API-{P}.jsonl` 会落一份每 3 行一组的 `.txt`（请求 JSON / 响应 JSON / `API_total_time: <s>`）。`4_API_eval` 按 3 行一组解析。
+API 客户端跑完 `*-{BFCL|HUMANEVAL}-API-*.jsonl` 会落一份每 3 行一组的 `.txt`（请求 JSON / 响应 JSON / `API_total_time: <s>`）。`4_API_eval` 按 3 行一组解析。
+
+**响应格式：自动嗅探两种接口**
+
+| 格式 | 嗅探规则 | 响应字段位置 | 时长字段 |
+| --- | --- | --- | --- |
+| **Ollama 风格**（旧） | 顶层有 `message.content`，含 `prompt_eval_duration` / `eval_duration` | `resp.message.content` | `prompt_eval_duration` (ns) / `eval_duration` (ns) |
+| **OpenAI chat.completion 风格**（新） | 顶层 `object == "chat.completion"` 或有 `choices[].message.content` | `resp.choices[0].message.content` | 无 prefill / decode 分段，TTFT / decode 写 NaN，total 只有 `API_total_time` |
+
+每条 result 多一列 `resp_format`（取值 `ollama` / `chat_completion` / `unknown`）方便事后定位，启动时也会在日志里打 `[INFO] response formats detected: ...` 汇总。token 长度优先用响应自带的 `usage.prompt_tokens` / `usage.completion_tokens`（chat.completion）或 `prompt_eval_count` / `eval_count`（Ollama），缺了再本地 tokenize 兜底。
+
+### BFCL API
 
 ```bash
 cd 4_API_eval
 bash run_eval_bfcl_api_results.sh
 ```
-
-或直接命令行：
 
 ```bash
 python Eval_BFCL_API_results.py \
@@ -407,10 +432,29 @@ python Eval_BFCL_API_results.py \
     --show_detail
 ```
 
-产出在 `{project_base}/API-BFCL-<YYYYMMDD>[-N]/` 下（结构同 OMC，文件名 `API-*`，同日重跑追加 `-2` / `-3`）。时长口径：
-- `first_token_time` = `prompt_eval_duration / 1e9`（响应 JSON 里的 prefill 耗时，纳秒 → 秒）
-- `decode_time` = `eval_duration / 1e9`
-- `total_time` = `API_total_time`（客户端 wall-clock，含网络 RTT）
+产出在 `{project_base}/API-BFCL-<YYYYMMDD>[-N]/`。
+
+### HumanEval API
+
+```bash
+cd 4_API_eval
+bash run_eval_humaneval_api_results.sh
+```
+
+```bash
+python Eval_HumanEval_API_results.py \
+    ../Model_file/Qwen2.5-Coder-7B-Instruct \
+    ../../model-eval-storage/Qwen2.5-Coder-7B-Instruct/project-1/project-1-HUMANEVAL-API-164.txt \
+    --show_detail
+```
+
+产出在 `{project_base}/API-HUMANEVAL-<YYYYMMDD>[-N]/`。同样在 evaluator host 上跑 subprocess，注意沙箱事项。
+
+---
+
+时长口径（视响应格式）：
+- Ollama：`first_token_time = prompt_eval_duration / 1e9`、`decode_time = eval_duration / 1e9`、`total_time = API_total_time`
+- chat.completion：`first_token_time = NaN`、`decode_time = NaN`、`total_time = API_total_time`（接口没回分段时长，`eval_results._safe_tps` 会自动 fall back 到 total_time 估 TPS）
 
 ## 五、评分细则
 

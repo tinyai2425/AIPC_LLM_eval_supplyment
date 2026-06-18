@@ -70,8 +70,8 @@ mp = SimpleNamespace(**config_dict)
 
 MAX_OUTPUT_TOKEN_LENGTH = 5000
 
-if not re.fullmatch(r"[A-Za-z0-9_\-]+", mp.model_name):
-    raise ValueError(f"非法的 MODEL_NAME: {mp.model_name}，只能包含字母、数字、- 和 _")
+#if not re.fullmatch(r"[A-Za-z0-9_\-]+", mp.model_name):
+#    raise ValueError(f"非法的 MODEL_NAME: {mp.model_name}，只能包含字母、数字、- 和 _")
 
 PROJECT_BASE = f"../../model-eval-storage/{mp.model_name}"
 PROJECT_PREFIX = "project"

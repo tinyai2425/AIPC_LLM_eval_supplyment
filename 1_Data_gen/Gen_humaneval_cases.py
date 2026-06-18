@@ -53,8 +53,8 @@ mp = SimpleNamespace(**config_dict)
 # 给到 5000 才能容下"完整 think + 完整代码块"——之前给 2000 导致大量样例被截断，造成假阴性。
 MAX_OUTPUT_TOKEN_LENGTH = 5000
 
-if not re.fullmatch(r"[A-Za-z0-9_\-]+", mp.model_name):
-    raise ValueError(f"非法的 MODEL_NAME: {mp.model_name}，只能包含字母、数字、- 和 _")
+#if not re.fullmatch(r"[A-Za-z0-9_\-]+", mp.model_name):
+#    raise ValueError(f"非法的 MODEL_NAME: {mp.model_name}，只能包含字母、数字、- 和 _")
 
 PROJECT_BASE = f"../../model-eval-storage/{mp.model_name}"
 PROJECT_PREFIX = "project"
