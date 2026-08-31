@@ -20,10 +20,12 @@ def init_tokenizer(path):
 
 
 def GET_answer(answer):
-    """模型是否产出了显式的 function call JSON / NO_CALL。"""
+    """模型是否产出了显式的 function call / 代码块。"""
     if not answer:
         return False
     if "```" in answer:
+        return True
+    if re.search(r"<tool_call>", answer, re.IGNORECASE):
         return True
     if re.search(r"\[\s*\{", answer):
         return True

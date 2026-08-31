@@ -1,6 +1,7 @@
 # GPU 侧 BFCL 评估
-#   读取 1_Data_gen 产出的 {project}-BFCL-GPU-*.json
-#   起多线程打远端 vLLM，落 parquet + Excel + 趋势图 + 多 version 求均值 markdown
+# 读取 1_Data_gen 产出的 {project}-BFCL-GPU-*.json
+#   起多线程打远端 vLLM（messages + tools + tool_choice=auto，stream 组装 tool_calls）
+#   落 parquet + Excel + 趋势图 + 多 version 求均值 markdown
 #
 # 用法：
 #   python Eval_BFCL_GPU_results.py <tokenizer_path> <input_json_path> <ip> <port> <model_id> <version_flag> [--show_detail]
@@ -105,6 +106,14 @@ if __name__ == "__main__":
 
             df_ref_results[version_num].to_parquet(ref_result_parquet_path)
             print(f"[SAVE] Results saved to {ref_result_parquet_path}")
+
+            answers_jsonl_path = os.path.join(
+                gpu_output_dir, f"GPU-Answers-{version_num}.jsonl"
+            )
+            parallel_fetch_gpu.save_answers_jsonl(
+                df_ref_results[version_num], answers_jsonl_path
+            )
+            print(f"[SAVE] Answers jsonl saved to {answers_jsonl_path}")
 
             ref_results = pd.read_parquet(ref_result_parquet_path)
             evaluated_results[version_num] = eval_results.evaluate_reference_results(

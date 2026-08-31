@@ -5,6 +5,7 @@
   "TOPP": 1,
   "TOPK": 1,
   "REPETITIONPENALTY": 1.0,
+  "ENABLE_THINKING": false,
   "INFER_TYPE": 0,
   "TOKENIZER_TYPE": 4,
   "TOKENIZER_PATH": "tokenizer.json",

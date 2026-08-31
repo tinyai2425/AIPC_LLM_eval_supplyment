@@ -2,9 +2,9 @@
 #   python Gen_bfcl_cases.py <model_config.json> <DATASET_ROOT> <MAX_CASES_PER_CATEGORY> [--categories cat1,cat2,...]
 #
 # 产出（在 ../../model-eval-storage/{model_name}/project-N/ 下）：
-#   project-N-BFCL-OMC-{P}.json   OMC：严格原版 Ceval 结构（chat template 已应用，单串 prompt）
-#   project-N-BFCL-GPU-{P}.json   GPU：Ceval 外壳 + sentences[0].messages（直接送 vLLM）
-#   project-N-BFCL-API-{P}.jsonl  API：OpenAI 风格顶层 messages
+#   project-N-BFCL-OMC-{P}.json   OMC：apply_chat_template(messages, tools=) 渲成单串 prompt
+#   project-N-BFCL-GPU-{P}.json   GPU：messages + tools + tool_choice=auto（原生 function calling）
+#   project-N-BFCL-API-{P}.jsonl  API：顶层 messages / tools / tool_choice（格式未最终定）
 #   api_config.json               推理 runtime 参数
 #
 # 注：性能测试用例在 Ceval_ref 那一套里做，本目录只生成工具调用评估用例。
@@ -163,6 +163,7 @@ api_config = {
     "initTokenLen": mp.INIT_TOKEN_LEN,
     "stopSeq": mp.STOP_SEQ,
     "isAsync": mp.IS_ASYNC,
+    "enableThinking": bool(getattr(mp, "ENABLE_THINKING", False)),
     "chatTemplate": CHAT_TEMPLATE,
     "modelInfo": {"license": license_text},
 }

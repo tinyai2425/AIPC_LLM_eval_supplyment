@@ -30,7 +30,33 @@ def _normalize_string(s):
     return re.sub(r"\s+", " ", str(s).strip().lower())
 
 
+def _is_allowed_value_spec(obj):
+    """GT 嵌套 object：值全是 allowed-values 列表，例如
+    {'department': ['Science'], 'school': ['Bluebird High School', '']}。"""
+    return (
+        isinstance(obj, dict)
+        and len(obj) > 0
+        and all(isinstance(v, list) for v in obj.values())
+    )
+
+
+def _match_nested_object(allowed_spec, actual):
+    if not isinstance(actual, dict):
+        return False
+    extra = set(actual.keys()) - set(allowed_spec.keys())
+    if extra:
+        return False
+    for param, allowed_values in allowed_spec.items():
+        present = param in actual
+        if not _match_param_value(allowed_values, actual.get(param), present):
+            return False
+    return True
+
+
 def _values_equal(allowed, actual):
+    if _is_allowed_value_spec(allowed) and isinstance(actual, dict):
+        return _match_nested_object(allowed, actual)
+
     if isinstance(allowed, bool) or isinstance(actual, bool):
         # Python 里 True == 1，所以必须先把 bool 隔离开
         return (

@@ -6,6 +6,7 @@
   "TOPP": 0.95,
   "TOPK": 10,
   "REPETITIONPENALTY": 1.1,
+  "ENABLE_THINKING": true,
 
   "INFER_TYPE": 0,
   "TOKENIZER_TYPE": 4,

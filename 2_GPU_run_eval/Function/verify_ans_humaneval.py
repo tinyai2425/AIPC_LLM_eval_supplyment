@@ -101,7 +101,7 @@ def _run_check(program, timeout):
         return -2, f"[EXEC ERROR] {exc!r}"
 
 
-def verify_answer(eval_type, expect, response_text, timeout=10):
+def verify_answer(eval_type, expect, response_text, timeout=10, tool_calls=None):  # noqa: ARG001
     """返回 (correct: bool, prediction_str: str)。
     prediction_str 是个 JSON：{"code": <抽出的代码>, "error": <若 fail 时的 stderr 尾巴>}。"""
     code = extract_code(response_text)

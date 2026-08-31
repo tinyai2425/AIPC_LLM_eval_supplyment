@@ -108,6 +108,14 @@ if __name__ == "__main__":
             df_ref_results[version_num].to_parquet(ref_result_parquet_path)
             print(f"[SAVE] Results saved to {ref_result_parquet_path}")
 
+            answers_jsonl_path = os.path.join(
+                gpu_output_dir, f"GPU-Answers-{version_num}.jsonl"
+            )
+            parallel_fetch_gpu.save_answers_jsonl(
+                df_ref_results[version_num], answers_jsonl_path
+            )
+            print(f"[SAVE] Answers jsonl saved to {answers_jsonl_path}")
+
             ref_results = pd.read_parquet(ref_result_parquet_path)
             evaluated_results[version_num] = eval_results.evaluate_reference_results(
                 ref_results,

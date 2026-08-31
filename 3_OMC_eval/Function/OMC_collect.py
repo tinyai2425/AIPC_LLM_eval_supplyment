@@ -15,6 +15,7 @@
 #   [INFO] ## testCaseName: project-1-bfcl-test-simple-0, Done
 #
 # 解析完每条用例后立即跑 verify_ans.verify_answer(eval_type, expect, response) 出 correct + prediction。
+# OMC 没有结构化 tool_calls，从 all generation 文本抽 Qwen <tool_call> / JSON。
 # eval_type 从 testCaseName 解析出 category 再查 CATEGORY_TO_EVAL_TYPE，跟 GPU 链路一致。
 
 import re

@@ -13,18 +13,16 @@
 #      total_time       = API_total_time              (含网络 RTT)
 #
 # B) OpenAI chat.completion 风格（新）：
-#    {"created": ..., "model": "...", "object": "chat.completion",
-#     "choices": [{"index": 0, "message": {"role": "assistant", "content": "..."},
-#                  "finish_reason": "stop"}],
-#     "usage": {"prompt_tokens": N, "completion_tokens": N, "total_tokens": N}}
+#    响应 message 可能是 content 文本，或 content=null + tool_calls（BFCL GPU/agent 协议）。
 #    时长口径：服务端没回 prefill / decode 时长，只能写 None；total_time 仍用 API_total_time。
 #
-# 评分：与 OMC / GPU 链路一致——从 testCaseName 解析 category 后查 eval_type，再交给 verify_answer。
-#       BFCL 注入 verify_ans，HumanEval 注入 verify_ans_humaneval，互不干扰。
+#   评分：与 OMC / GPU 链路一致——从 testCaseName 解析 category 后查 eval_type，再交给 verify_answer。
+#       BFCL 注入 verify_ans（优先 message.tool_calls），HumanEval 注入 verify_ans_humaneval。
 
+import inspect
 import json
 import math
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Union
 
 import pandas as pd
 from transformers import AutoTokenizer
@@ -62,9 +60,8 @@ def _messages_to_str(messages):
 def _detect_format(resp: dict) -> str:
     """返回 'chat_completion' / 'ollama' / 'unknown'。
     嗅探规则：
-      - 顶层有 choices[].message.content     -> OpenAI chat.completion
-      - 顶层有 message.content               -> Ollama
-      - 都不像                                -> unknown
+      - 顶层 object==chat.completion，或 choices[].message 含 content / tool_calls
+      - 顶层有 message.content / message.tool_calls -> Ollama
     """
     if not isinstance(resp, dict):
         return "unknown"
@@ -73,48 +70,52 @@ def _detect_format(resp: dict) -> str:
     choices = resp.get("choices")
     if isinstance(choices, list) and choices and isinstance(choices[0], dict):
         msg = choices[0].get("message")
-        if isinstance(msg, dict) and "content" in msg:
+        if isinstance(msg, dict) and ("content" in msg or "tool_calls" in msg):
             return "chat_completion"
     msg = resp.get("message")
-    if isinstance(msg, dict) and "content" in msg:
+    if isinstance(msg, dict) and ("content" in msg or "tool_calls" in msg):
         return "ollama"
     return "unknown"
 
 
-def _extract_response_fields(resp: dict) -> Tuple[str, Optional[float], Optional[float], Optional[int], Optional[int]]:
-    """从响应 JSON 抽出统一字段：
-        (response_text, first_token_time_s, decode_time_s, prompt_tokens, completion_tokens)
-    缺失字段返回 None，由 DataFrame 转成 NaN。
+def _extract_response_fields(resp: dict):
+    """从响应 JSON 抽出：
+        (response_text, tool_calls, first_token_time_s, decode_time_s, prompt_tokens, completion_tokens)
     """
     fmt = _detect_format(resp)
 
     if fmt == "chat_completion":
         choices = resp.get("choices") or []
         response_text = ""
+        tool_calls = None
         if choices and isinstance(choices[0], dict):
             msg = choices[0].get("message") or {}
             response_text = msg.get("content", "") or ""
+            raw_tc = msg.get("tool_calls")
+            if raw_tc:
+                tool_calls = raw_tc
         usage = resp.get("usage") or {}
         prompt_tokens = usage.get("prompt_tokens")
         completion_tokens = usage.get("completion_tokens")
-        # OpenAI chat.completion 不分段返回时长，无法准确切 prefill / decode
-        return response_text, None, None, prompt_tokens, completion_tokens
+        return response_text, tool_calls, None, None, prompt_tokens, completion_tokens
 
     if fmt == "ollama":
         msg = resp.get("message") or {}
         response_text = msg.get("content", "") or ""
+        raw_tc = msg.get("tool_calls")
+        tool_calls = raw_tc if raw_tc else None
         prefill_ns = resp.get("prompt_eval_duration")
         decode_ns = resp.get("eval_duration")
         prompt_tokens = resp.get("prompt_eval_count")
         completion_tokens = resp.get("eval_count")
         ftt = float(prefill_ns) / 1e9 if prefill_ns is not None else None
         dec = float(decode_ns) / 1e9 if decode_ns is not None else None
-        return response_text, ftt, dec, prompt_tokens, completion_tokens
+        return response_text, tool_calls, ftt, dec, prompt_tokens, completion_tokens
 
-    # unknown：尽力提取 message.content
     msg = resp.get("message") if isinstance(resp, dict) else None
     response_text = (msg or {}).get("content", "") if isinstance(msg, dict) else ""
-    return response_text, None, None, None, None
+    raw_tc = (msg or {}).get("tool_calls") if isinstance(msg, dict) else None
+    return response_text, raw_tc if raw_tc else None, None, None, None, None
 
 
 def parse_llm_api_results(input_path: str) -> pd.DataFrame:
@@ -159,17 +160,25 @@ def parse_llm_api_results(input_path: str) -> pd.DataFrame:
         # === 响应字段（按响应格式自适应）===
         fmt = _detect_format(resp_line)
         fmt_counts[fmt] = fmt_counts.get(fmt, 0) + 1
-        response_text, ftt_s, decode_s, prompt_tok, completion_tok = _extract_response_fields(resp_line)
+        response_text, tool_calls, ftt_s, decode_s, prompt_tok, completion_tok = _extract_response_fields(resp_line)
         case["resp_format"] = fmt
         case["response"] = response_text
+        try:
+            case["tool_calls"] = json.dumps(tool_calls, ensure_ascii=False) if tool_calls else "[]"
+        except (TypeError, ValueError):
+            case["tool_calls"] = "[]"
 
         # === 采样参数 ===
-        options = req_line.get("options", {}) or {}
-        case["temperature"] = options.get("temperature")
-        case["top_k"] = options.get("top_k")
-        case["top_p"] = options.get("top_p")
-        case["repetitionPenalty"] = options.get("repeat_penalty")
-        case["max gen tokens"] = options.get("num_predict")
+        options = req_line.get("options") or {}
+        case["temperature"] = req_line.get("temperature", options.get("temperature"))
+        case["top_k"] = req_line.get("top_k", options.get("top_k"))
+        case["top_p"] = req_line.get("top_p", options.get("top_p"))
+        case["repetitionPenalty"] = req_line.get(
+            "repetition_penalty", options.get("repeat_penalty")
+        )
+        case["max gen tokens"] = req_line.get(
+            "max_tokens", options.get("num_predict")
+        )
 
         # === Token 长度（优先用响应 usage / count，缺了再本地 tokenize 兜底）===
         if prompt_tok is not None:
@@ -187,15 +196,27 @@ def parse_llm_api_results(input_path: str) -> pd.DataFrame:
         case["decode_time"] = decode_s if decode_s is not None else math.nan
         case["total_time"] = api_total_time
 
-        # === 内容质量指标 ===
-        case["get_ans"] = GET_answer(response_text)
-        case["repeat"] = calculate_repetition_rate(response_text)
-        case["entropy"] = calculate_token_entropy(response_text)
+        quality_text = response_text
+        if tool_calls and not quality_text:
+            try:
+                quality_text = json.dumps(tool_calls, ensure_ascii=False)
+            except (TypeError, ValueError):
+                quality_text = str(tool_calls)
+        case["get_ans"] = bool(tool_calls) or GET_answer(response_text)
+        case["repeat"] = calculate_repetition_rate(quality_text)
+        case["entropy"] = calculate_token_entropy(quality_text)
 
-        # === 评分 ===
         eval_type = get_eval_type(case["category"]) if case["category"] else "ast"
         case["eval_type"] = eval_type
-        correct, prediction = verify_answer(eval_type, case["expect"], response_text)
+        verify_kwargs = {}
+        try:
+            if "tool_calls" in inspect.signature(verify_answer).parameters:
+                verify_kwargs["tool_calls"] = tool_calls
+        except (TypeError, ValueError):
+            pass
+        correct, prediction = verify_answer(
+            eval_type, case["expect"], response_text, **verify_kwargs
+        )
         case["correct"] = bool(correct)
         case["prediction"] = prediction
 

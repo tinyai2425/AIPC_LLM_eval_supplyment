@@ -147,6 +147,7 @@ api_config = {
     "initTokenLen": mp.INIT_TOKEN_LEN,
     "stopSeq": list(mp.STOP_SEQ) + he.EXTRA_STOP_SEQ,
     "isAsync": mp.IS_ASYNC,
+    "enableThinking": bool(getattr(mp, "ENABLE_THINKING", False)),
     "chatTemplate": CHAT_TEMPLATE,
     "modelInfo": {"license": license_text},
 }
