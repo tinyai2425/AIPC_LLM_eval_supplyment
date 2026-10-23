@@ -14,10 +14,14 @@
 #   [INFO] expect: [{"calculate_triangle_area": {...}}]
 #   [INFO] ## testCaseName: project-1-bfcl-test-simple-0, Done
 #
-# 解析完每条用例后立即跑 verify_ans.verify_answer(eval_type, expect, response) 出 correct + prediction。
-# OMC 没有结构化 tool_calls，从 all generation 文本抽 Qwen <tool_call> / JSON。
+# 解析完每条用例后立即评分。
+# BFCL：若注入了 vllm_parser，用 vLLM 的 reasoning / tool-call parser 把原文拆成
+# reasoning_content + content + tool_calls，再按结构化 tool_calls 评分（与 GPU 同一条 verify）。
+# 没注入时（HumanEval，或 BFCL 未指定 parser）仍把 all generation 整段交给 verify_answer。
 # eval_type 从 testCaseName 解析出 category 再查 CATEGORY_TO_EVAL_TYPE，跟 GPU 链路一致。
 
+import inspect
+import json
 import re
 from typing import Dict, List, Optional, Union
 
@@ -36,12 +40,32 @@ verify_answer = None
 get_eval_type = None
 TEST_CASE_NAME_PATTERN = None
 iter_lines_safely = None
+# BFCL 主脚本注入。None 时不走 vLLM parser。
+vllm_parser = None
+_parser_error_logs = 0
 
 
 def init_tokenizer(path):
     global TOKENIZER_CONFIG_PATH, tokenizer
     TOKENIZER_CONFIG_PATH = path
     tokenizer = AutoTokenizer.from_pretrained(path)
+
+
+def init_vllm_parser(parser):
+    global vllm_parser, _parser_error_logs
+    vllm_parser = parser
+    _parser_error_logs = 0
+
+
+def _score_case(eval_type, expect_str, response_text, tool_calls):
+    fn = verify_answer
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        params = {}
+    if tool_calls is not None and "tool_calls" in params:
+        return fn(eval_type, expect_str, response_text, tool_calls=tool_calls)
+    return fn(eval_type, expect_str, response_text)
 
 
 def convert_to_ms(value: float, unit: str) -> float:
@@ -56,6 +80,7 @@ def convert_to_ms(value: float, unit: str) -> float:
 
 
 def parse_llm_test_results(output_path: str) -> pd.DataFrame:
+    global _parser_error_logs
     case_start_pattern = re.compile(
         r"\[(?:INFO|WARNING|ERROR|EXCEPTION)\] ## testCaseName: ([a-zA-Z0-9_\-]+), start.*"
     )
@@ -121,18 +146,56 @@ def parse_llm_test_results(output_path: str) -> pd.DataFrame:
                         tokenizer(response)["input_ids"]
                     )
 
-                    # 内容质量指标
+                    # 内容质量指标按原文算（含思考），和 token 长度同一口径
                     case_data["get_ans"] = GET_answer(response)
                     case_data["repeat"] = calculate_repetition_rate(response)
                     case_data["entropy"] = calculate_token_entropy(response)
 
-                    # 评分：eval_type 从 category 查
                     category = case_data.get("category", "")
                     eval_type = get_eval_type(category)
                     case_data["eval_type"] = eval_type
                     expect_str = (case_data.get("expect", "") or "").strip()
                     case_data["expect"] = expect_str
-                    correct, prediction = verify_answer(eval_type, expect_str, response)
+
+                    score_text = response
+                    tool_calls_for_verify = None
+                    if vllm_parser is not None:
+                        try:
+                            parsed = vllm_parser.parse(
+                                response, prompt=case_data.get("prompt", "")
+                            )
+                        except Exception as exc:  # noqa: BLE001
+                            _parser_error_logs += 1
+                            if _parser_error_logs <= 5:
+                                print(
+                                    f"[WARN] vLLM parser failed on {case_name}: {exc}"
+                                )
+                            case_data["reasoning_content"] = ""
+                            case_data["parsed_content"] = ""
+                            case_data["tool_calls"] = "[]"
+                            case_data["correct"] = False
+                            case_data["prediction"] = json.dumps(
+                                {"parser_error": str(exc)}, ensure_ascii=False
+                            )
+                            results.append(case_data)
+                            case_data = None
+                            continue
+
+                        case_data["reasoning_content"] = parsed.reasoning_content
+                        case_data["parsed_content"] = parsed.content
+                        case_data["tool_calls"] = json.dumps(
+                            parsed.tool_calls, ensure_ascii=False
+                        )
+                        # 空列表也要传进去：表示 parser 明确没调工具，不再走内置文本抽取
+                        tool_calls_for_verify = parsed.tool_calls
+                        score_text = parsed.content or ""
+                        case_data["get_ans"] = bool(parsed.tool_calls) or GET_answer(
+                            score_text
+                        ) or GET_answer(response)
+
+                    correct, prediction = _score_case(
+                        eval_type, expect_str, score_text, tool_calls_for_verify
+                    )
                     case_data["correct"] = bool(correct)
                     case_data["prediction"] = prediction
 
