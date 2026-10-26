@@ -2,9 +2,9 @@
 #
 # BFCL GPU：
 #   sentence 含 messages / tools / tool_choice=auto / expect + 采样参数
-#   vLLM chat.completions stream=True，传 tools；从 delta.tool_calls 组装调用再评分
-#   content 仅作兜底（部分 serving 把 <tool_call> 写进正文）
-# HumanEval GPU：sentence 无 tools，行为与原来一致，只读 delta.content
+#   有 tools 时 stream=False。vLLM 的 Hermes 流式解析会丢 arguments 片段，
+#   非流式 message.tool_calls 才是完整 JSON。
+# HumanEval GPU：sentence 无 tools，仍 stream=True，只读 delta.content
 
 import inspect
 import json
@@ -48,6 +48,33 @@ def _as_bool(value, default=False):
     if isinstance(value, str):
         return value.strip().lower() in ("1", "true", "yes", "on")
     return default
+
+
+def _reasoning_text(obj):
+    text = getattr(obj, "reasoning_content", None) or getattr(obj, "reasoning", None)
+    if text:
+        return text
+    extra = getattr(obj, "model_extra", None) or {}
+    if isinstance(extra, dict):
+        return extra.get("reasoning_content") or extra.get("reasoning") or ""
+    return ""
+
+
+def _message_tool_calls(message):
+    """非流式 message.tool_calls -> 与流式拼装相同的 dict 列表。"""
+    calls = []
+    for tc in getattr(message, "tool_calls", None) or []:
+        fn = getattr(tc, "function", None)
+        name = getattr(fn, "name", None) if fn is not None else None
+        arguments = getattr(fn, "arguments", None) if fn is not None else None
+        if not name:
+            continue
+        calls.append({
+            "id": getattr(tc, "id", None),
+            "type": getattr(tc, "type", None) or "function",
+            "function": {"name": name, "arguments": arguments or ""},
+        })
+    return calls
 
 
 def _accumulate_tool_call_delta(buckets, delta_tool_calls):
@@ -134,10 +161,12 @@ def measure_performance(client, model_id, testCaseName, sentence):
     tool_choice = sentence.get("tool_choice") or "auto"
 
     enable_thinking = _as_bool(sentence.get("enableThinking"), default=False)
+    # 带 tools 的 BFCL 用非流式。流式 Hermes 会把 arguments 片段丢字。
+    use_stream = not tools
     create_kwargs = {
         "model": model_id,
         "messages": messages,
-        "stream": True,
+        "stream": use_stream,
         "seed": sentence.get("seed"),
         "temperature": sentence.get("temperature"),
         "top_p": sentence.get("topP"),
@@ -163,44 +192,46 @@ def measure_performance(client, model_id, testCaseName, sentence):
 
     response = client.chat.completions.create(**create_kwargs)
 
-    for chunk in response:
-        if not chunk.choices:
-            continue
-        choice = chunk.choices[0]
-        delta = choice.delta
-        if delta is None:
-            continue
+    if use_stream:
+        for chunk in response:
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            delta = choice.delta
+            if delta is None:
+                continue
 
-        piece = getattr(delta, "content", None)
-        if piece:
-            if first_token_time is None:
-                first_token_time = time.time() - start_time
-            full_response += piece
+            piece = getattr(delta, "content", None)
+            if piece:
+                if first_token_time is None:
+                    first_token_time = time.time() - start_time
+                full_response += piece
 
-        # vLLM --reasoning-parser 把思考写到 reasoning_content，不在 content 里
-        reason_piece = getattr(delta, "reasoning_content", None) or getattr(
-            delta, "reasoning", None
-        )
-        if reason_piece:
-            if first_token_time is None:
-                first_token_time = time.time() - start_time
-            reasoning_content += reason_piece
+            reason_piece = _reasoning_text(delta)
+            if reason_piece:
+                if first_token_time is None:
+                    first_token_time = time.time() - start_time
+                reasoning_content += reason_piece
 
-        delta_tcs = getattr(delta, "tool_calls", None)
-        if delta_tcs:
-            if first_token_time is None:
-                first_token_time = time.time() - start_time
-            _accumulate_tool_call_delta(tool_call_buckets, delta_tcs)
+            delta_tcs = getattr(delta, "tool_calls", None)
+            if delta_tcs:
+                if first_token_time is None:
+                    first_token_time = time.time() - start_time
+                _accumulate_tool_call_delta(tool_call_buckets, delta_tcs)
+        assembled_tool_calls = [
+            tool_call_buckets[i] for i in sorted(tool_call_buckets)
+            if tool_call_buckets[i].get("function", {}).get("name")
+        ]
+    else:
+        message = response.choices[0].message
+        full_response = getattr(message, "content", None) or ""
+        reasoning_content = _reasoning_text(message) or ""
+        assembled_tool_calls = _message_tool_calls(message)
 
     total_time = time.time() - start_time
     decode_time = (
         total_time - first_token_time if first_token_time is not None else None
     )
-
-    assembled_tool_calls = [
-        tool_call_buckets[i] for i in sorted(tool_call_buckets)
-        if tool_call_buckets[i].get("function", {}).get("name")
-    ]
 
     matched = re.match(verify_ans.TEST_CASE_NAME_PATTERN, testCaseName)
     if matched is None:
@@ -209,8 +240,12 @@ def measure_performance(client, model_id, testCaseName, sentence):
     category = matched.group("vertical")
     eval_type = verify_ans.get_eval_type(category)
 
-    # 结构化 tool_calls 优先；没有则从 content + reasoning 文本抽 <tool_call>
-    verify_tool_calls = assembled_tool_calls if assembled_tool_calls else None
+    # 非流式：空 tool_calls 表示服务端判定没调用，不再从正文抽。
+    # 流式：没拼出调用时仍允许从 content 兜底（HumanEval 无 tools，不走这条）。
+    if use_stream:
+        verify_tool_calls = assembled_tool_calls if assembled_tool_calls else None
+    else:
+        verify_tool_calls = assembled_tool_calls
     fallback_text = full_response
     if not verify_tool_calls:
         fallback_text = (reasoning_content or "") + (full_response or "")

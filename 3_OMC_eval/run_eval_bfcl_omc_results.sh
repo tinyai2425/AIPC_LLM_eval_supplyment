@@ -9,7 +9,7 @@
 # 思考关掉时把 ENABLE_THINKING 设为 false（会传 --disable-thinking）。
 
 TOKENIZER_PATH="../Model_file/Qwen3-4B"
-TEST_RESULT_PATH="../../model-eval-storage/Qwen3-4B/project-1/project-1-BFCL-OMC-100.txt"
+TEST_RESULT_PATH="../../model-eval-storage/Qwen3-4B/project-7/project-3-BFCL-OMC-100.txt"
 SHOW_DETAIL=true   # true / false
 REASONING_PARSER="qwen3"
 TOOL_CALL_PARSER="hermes"

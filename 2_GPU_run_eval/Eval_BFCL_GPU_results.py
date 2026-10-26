@@ -1,6 +1,6 @@
 # GPU 侧 BFCL 评估
 # 读取 1_Data_gen 产出的 {project}-BFCL-GPU-*.json
-#   起多线程打远端 vLLM（messages + tools + tool_choice=auto，stream 组装 tool_calls）
+#   起多线程打远端 vLLM（messages + tools + tool_choice=auto，stream=false 读 tool_calls）
 #   落 parquet + Excel + 趋势图 + 多 version 求均值 markdown
 #
 # 用法：
