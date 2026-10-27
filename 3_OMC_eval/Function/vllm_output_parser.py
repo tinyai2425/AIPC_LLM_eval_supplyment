@@ -123,9 +123,46 @@ def _split_reasoning(parser, text, request):
     )
 
 
+def _coerce_param_value(value):
+    """qwen3_xml 的 parameter 正文是纯文本，本机 vLLM 会整段放进 JSON 字符串。
+
+    GPU 上的 vLLM 会把数组、对象、布尔还原成 JSON 类型。AST 比对要求 list 对 list、
+    bool 对 bool，所以这里在评分前做同样的还原。Hermes 的 arguments 已经带类型，
+    普通字符串和数字再走一遍保持原样。
+    """
+    if isinstance(value, dict):
+        return {k: _coerce_param_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_coerce_param_value(v) for v in value]
+    if not isinstance(value, str):
+        return value
+    s = value.strip()
+    if s in ("true", "True"):
+        return True
+    if s in ("false", "False"):
+        return False
+    if len(s) >= 2 and s[0] in "[{" and s[-1] in "]}":
+        try:
+            return _coerce_param_value(json.loads(s))
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
 def _arguments_to_str(arguments):
     if arguments is None:
         return "{}"
+    parsed = arguments
+    if isinstance(arguments, str):
+        try:
+            parsed = json.loads(arguments)
+        except json.JSONDecodeError:
+            return arguments
+    if isinstance(parsed, dict):
+        try:
+            return json.dumps(_coerce_param_value(parsed), ensure_ascii=False)
+        except (TypeError, ValueError):
+            return arguments if isinstance(arguments, str) else str(arguments)
     if isinstance(arguments, str):
         return arguments
     try:

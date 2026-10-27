@@ -8,12 +8,12 @@
 #   Qwen3.5        : TOOL_CALL_PARSER=qwen3_xml
 # 思考关掉时把 ENABLE_THINKING 设为 false（会传 --disable-thinking）。
 
-TOKENIZER_PATH="../Model_file/Qwen3-4B"
-TEST_RESULT_PATH="../../model-eval-storage/Qwen3-4B/project-7/project-3-BFCL-OMC-100.txt"
+TOKENIZER_PATH="../Model_file/Qwen3.5-4B"
+TEST_RESULT_PATH="../../model-eval-storage/Qwen3.5-4B/project-4/project-7-BFCL-OMC-100.txt"
 SHOW_DETAIL=true   # true / false
 REASONING_PARSER="qwen3"
-TOOL_CALL_PARSER="hermes"
-ENABLE_THINKING=true   # true / false
+TOOL_CALL_PARSER="qwen3_xml"
+ENABLE_THINKING=false   # true / false
 
 ARGS=(
     "$TOKENIZER_PATH"

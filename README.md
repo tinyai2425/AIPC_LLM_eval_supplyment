@@ -13,7 +13,7 @@ Data_set/            BFCL、HumanEval 原始数据
 Model_file/          本地 tokenizer
 ```
 
-BFCL 请求是 OpenAI chat：`messages` + `tools` + `tool_choice=auto`。GPU 用非流式返回的 `tool_calls` 评分（vLLM Hermes 流式解析会丢 arguments）。OMC 日志是原文，评分时调用本机 vLLM 的同名 parser。HumanEval 无 tools，只评生成代码。
+BFCL 请求是 OpenAI chat：`messages` + `tools` + `tool_choice=auto`。GPU 用非流式返回的 `tool_calls` 评分（vLLM Hermes 流式解析会丢 arguments）。OMC 日志是原文，评分时调用本机 vLLM 的同名 parser。`qwen3_xml` 会把数组、对象、布尔从参数文本还原成 JSON 类型后再评分。HumanEval 无 tools，只评生成代码。
 
 ## 启动 vLLM
 
